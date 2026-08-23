@@ -6,7 +6,7 @@
         public Guid OrderId { get; set; }
         public decimal Amount { get; set; }
         public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
-        public DateTimeOffset ProcessedAt { get; set; } = DateTimeOffset.UtcNow;
+        public DateTime ProcessedAt { get; set; } = DateTime.UtcNow;
         public string? FailureReason { get; set; }
     }
 }
