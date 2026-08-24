@@ -1,7 +1,10 @@
-﻿namespace OrderProcessing.Api.Models
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace OrderProcessing.Api.Models
 {
     public class PaymentTransaction
     {
+        [Key]
         public Guid TransactionId { get; set; } = Guid.NewGuid();
         public Guid OrderId { get; set; }
         public decimal Amount { get; set; }

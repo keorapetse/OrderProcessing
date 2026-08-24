@@ -15,6 +15,7 @@ namespace OrderProcessing.Api.Services
         {
             _appDbContext = appDbContext;
             _logger = logger;
+
         }
 
         public async Task<InventoryItem?> GetAvailableProductsAsync(string productId)
@@ -23,17 +24,18 @@ namespace OrderProcessing.Api.Services
             return availableStock;
         }
 
-        //will come back to this later
-        public async Task<InventoryItem?> ReserveStockAsync(string product, int quantity)
+        public async Task<InventoryItem?> ReserveStockAsync(string productId, int quantity, InventoryItem inventoryItem)
         {
-            var inventoryItem = await GetAvailableProductsAsync(product);
+            inventoryItem.AvailableQuantity -= quantity; // removed requsted quantity from available quantity
+            inventoryItem.ReservedQuantity += quantity; // add new quantity to reserved quantity
+            await _appDbContext.SaveChangesAsync();
+            return inventoryItem;
+        }
 
-            if (inventoryItem.AvailableQuantity < quantity)
-            {
-                _logger.LogWarning($"Cannot reserve {quantity} units for product ID: {product}. Available quantity: {inventoryItem.AvailableQuantity}");
-                return null;
-            }
-
+        public async Task<InventoryItem?> ReleaseStockAsync(string productId, int quantity, InventoryItem inventoryItem)
+        {
+            inventoryItem.ReservedQuantity -= quantity; // remove requested stock from reserved quantity
+            inventoryItem.AvailableQuantity += quantity; // add requested stock back to the available quantity
             await _appDbContext.SaveChangesAsync();
 
             return inventoryItem;

@@ -5,6 +5,7 @@ namespace OrderProcessing.Api.Interfaces
     public interface IInventoryService
     {
         Task<InventoryItem?> GetAvailableProductsAsync(string productId);
-        Task<InventoryItem?> ReserveStockAsync(string productId, int quantity);
+        Task<InventoryItem?> ReserveStockAsync(string productId, int quantity, InventoryItem inventoryItem);
+        Task<InventoryItem?> ReleaseStockAsync(string productId, int quantity, InventoryItem inventoryItem);
     }
 }
