@@ -25,6 +25,13 @@ namespace OrderProcessing.Api.Services
             // Calculate the total amount from the submitted items.
             var totalAmount = request.Items.Sum(item => item.Quantity * item.UnitPrice);
 
+            // Validate the total amount early to provide a clear error when the order total is invalid
+            if (totalAmount <= 0)
+            {
+                _logger.LogWarning("Order total is invalid ({TotalAmount}) for customer {CustomerId}.", totalAmount, request.CustomerId);
+                return (null, $"Order total must be greater than zero. Calculated total: {totalAmount}.");
+            }
+
             // Create the database entity from the request DTO.
             var order = new Order
             {
@@ -51,7 +58,7 @@ namespace OrderProcessing.Api.Services
 
             try
             {
-                // 1.Check inventory availability for every item.
+                // 1.Check if we have stock for requested item
                 foreach (var item in order.Items)
                 {
                     var inventoryResponse = await _httpClient.GetAsync($"api/inventory/{item.ProductId}");
@@ -76,13 +83,13 @@ namespace OrderProcessing.Api.Services
                     if (inventoryItem == null || inventoryItem.AvailableQuantity < item.Quantity)
                     {
                         _logger.LogWarning(
-                            "Insufficient inventory for product {ProductId}. Requested: {RequestedQuantity}, Available: {AvailableQuantity}.",
+                            "Insufficient stock for product {ProductId}. Requested: {RequestedQuantity}, Available: {AvailableQuantity}.",
                             item.ProductId,
                             item.Quantity,
                             inventoryItem?.AvailableQuantity ?? 0);
 
                         await CancelOrderAsync(order);
-                        return (null, $"Insufficient inventory for product {item.ProductId}. " + $"Requested: {item.Quantity}, Available: {inventoryItem?.AvailableQuantity ?? 0}.");
+                        return (null, $"Insufficient stock for product {item.ProductId}. " + $"Requested: {item.Quantity}, Available: {inventoryItem?.AvailableQuantity ?? 0}.");
                     }
                 }
 
@@ -112,12 +119,14 @@ namespace OrderProcessing.Api.Services
 
                 var paymentResponse = await _httpClient.PostAsJsonAsync("api/payments/process", paymentRequest);
 
+                // if payment is unsuccessful, release the reserved stock
                 if (!paymentResponse.IsSuccessStatusCode)
                 {
-                    _logger.LogWarning("Payment processing failed for order {OrderId}.", order.Id);
+                    var paymentErrorBody = await paymentResponse.Content.ReadAsStringAsync();
+                    _logger.LogWarning("Payment processing failed for order {OrderId}. Payment service responded with status {StatusCode} and body: {Body}", order.Id, paymentResponse.StatusCode, paymentErrorBody);
                     await ReleaseReservedItemsAsync(reservedItems);
                     await CancelOrderAsync(order);
-                    return (null, $"Payment processing failed for order {order.Id}.");
+                    return (null, $"Payment processing failed for order {order.Id}. Payment service response: {paymentErrorBody}");
                 }
 
                 var paymentResponseBody = await paymentResponse.Content.ReadAsStringAsync();
@@ -133,10 +142,10 @@ namespace OrderProcessing.Api.Services
 
                 if (paymentTransaction == null || paymentTransaction.Status != PaymentStatus.Completed)
                 {
-                    _logger.LogWarning("Payment was not completed for order {OrderId}.", order.Id);
+                    _logger.LogWarning("Payment was not completed for order {OrderId}. Response body: {Body}", order.Id, paymentResponseBody);
                     await ReleaseReservedItemsAsync(reservedItems);
                     await CancelOrderAsync(order);
-                    return (null, $"Payment was not completed for order {order.Id}.");
+                    return (null, $"Payment was not completed for order {order.Id}. Payment response: {paymentResponseBody}");
                 }
 
                 //4. Payment succeeded, so confirm the order.

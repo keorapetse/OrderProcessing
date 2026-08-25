@@ -38,11 +38,11 @@ namespace OrderProcessing.Api.Controllers
                     return BadRequest("Order must contain at least one item.");
                 }
 
-                var order = await _orderService.CreateOrderAsync(request);
+                var (order, error) = await _orderService.CreateOrderAsync(request);
 
                 if (order == null)
                 {
-                    return BadRequest("Unable to create order.");
+                    return BadRequest(error);
                 }
 
                 return Ok(order);
@@ -121,11 +121,11 @@ namespace OrderProcessing.Api.Controllers
                     return BadRequest("Invalid order status.");
                 }
 
-                var order = await _orderService.UpdateOrderStatusAsync(id, status);
+                var (order, error) = await _orderService.UpdateOrderStatusAsync(id, status);
 
                 if (order == null)
                 {
-                    return NotFound($"Order not found for order ID {id}.");
+                    return NotFound(error ?? $"Order not found for order ID {id}.");
                 }
 
                 return Ok(order);
