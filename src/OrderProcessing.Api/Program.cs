@@ -5,10 +5,6 @@ using OrderProcessing.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-//builder.Services.AddDbContext<AppDbContext>(options =>
-//    options.UseInMemoryDatabase("OrderProcessing"));
-
-
 // Add services to the container.
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
