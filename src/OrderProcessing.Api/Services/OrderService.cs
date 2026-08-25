@@ -93,20 +93,11 @@ namespace OrderProcessing.Api.Services
                 // 2. Reserve inventory for every item.
                 foreach (var item in order.Items)
                 {
-                    var stockRequest = new StockChangeRequest
-                    {
-                        Quantity = item.Quantity
-                    };
-
-                    var reserveResponse = await _httpClient.PostAsJsonAsync($"api/inventory/{item.ProductId}/reserve", stockRequest);
+                    var reserveResponse = await _httpClient.PostAsync($"api/inventory/{item.ProductId}/reserve?quantity={item.Quantity}", null);
 
                     if (!reserveResponse.IsSuccessStatusCode)
                     {
-                        _logger.LogWarning(
-                            "Failed to reserve {Quantity} units for product {ProductId}.",
-                            item.Quantity,
-                            item.ProductId);
-
+                        _logger.LogWarning("Failed to reserve {Quantity} units for product {ProductId}.", item.Quantity, item.ProductId);
                         await ReleaseReservedItemsAsync(reservedItems);
                         await CancelOrderAsync(order);
                         return null;
@@ -132,7 +123,16 @@ namespace OrderProcessing.Api.Services
                     return null;
                 }
 
-                var paymentTransaction = await paymentResponse.Content.ReadFromJsonAsync<PaymentTransaction>();
+                var paymentResponseBody = await paymentResponse.Content.ReadAsStringAsync();
+
+                var paymentTransaction = System.Text.Json.JsonSerializer.Deserialize<PaymentTransaction>(paymentResponseBody, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+             {
+            Converters =
+            {
+                new System.Text.Json.Serialization.JsonStringEnumConverter(
+                    System.Text.Json.JsonNamingPolicy.CamelCase)
+            }
+        });
 
                 if (paymentTransaction == null || paymentTransaction.Status != PaymentStatus.Completed)
                 {
@@ -161,6 +161,7 @@ namespace OrderProcessing.Api.Services
             }
         }
 
+        // return orders that were created using id
         public async Task<Order?> GetOrderByIdAsync(Guid id)
         {
             return await _db.Orders
@@ -170,6 +171,7 @@ namespace OrderProcessing.Api.Services
                     o => o.Id == id);
         }
 
+        // get the list of orders
         public async Task<IEnumerable<Order>> GetOrdersAsync(int page, int pageSize)
         {
             return await _db.Orders
@@ -214,11 +216,7 @@ namespace OrderProcessing.Api.Services
 
                     if (!response.IsSuccessStatusCode)
                     {
-                        _logger.LogError(
-                            "Failed to release {Quantity} units for product {ProductId}. Status code: {StatusCode}",
-                            item.Quantity,
-                            item.ProductId,
-                            response.StatusCode);
+                        _logger.LogError("Failed to release {Quantity} units for product {ProductId}. Status code: {StatusCode}", item.Quantity, item.ProductId, response.StatusCode);
                     }
                 }
                 catch (HttpRequestException ex)
