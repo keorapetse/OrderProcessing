@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using OrderProcessing.Api.Interfaces;
-using static OrderProcessing.Api.Dtos.InventoryDto;
 
 namespace OrderProcessing.Api.Controllers
 {

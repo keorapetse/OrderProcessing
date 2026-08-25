@@ -15,7 +15,7 @@ namespace OrderProcessing.Api.Data
             base.OnModelCreating(modelBuilder);
 
             modelBuilder.Entity<InventoryItem>()
-                .HasKey(i => i.ProductId);
+                .HasKey(i => i.ProductId); 
 
             modelBuilder.Entity<Order>()
                 .HasMany(o => o.Items)

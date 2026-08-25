@@ -5,9 +5,9 @@ namespace OrderProcessing.Api.Interfaces
 {
     public interface IOrderService
     {
-        Task<Order?> CreateOrderAsync(CreateOrderRequest request);
+        Task<(Order? Order, string? Error)> CreateOrderAsync(CreateOrderRequest request);
         Task<Order?> GetOrderByIdAsync(Guid id);
         Task<IEnumerable<Order>> GetOrdersAsync(int page, int pageSize);
-        Task<Order?> UpdateOrderStatusAsync(Guid id, OrderStatus status);
+        Task<(Order? Order, string? Error)> UpdateOrderStatusAsync(Guid id, OrderStatus status);
     }
 }

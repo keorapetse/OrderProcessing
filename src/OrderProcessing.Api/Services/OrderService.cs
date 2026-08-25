@@ -4,7 +4,6 @@ using OrderProcessing.Api.Dtos;
 using OrderProcessing.Api.Interfaces;
 using OrderProcessing.Api.Models;
 using System.Net;
-using static OrderProcessing.Api.Dtos.InventoryDto;
 
 namespace OrderProcessing.Api.Services
 {
@@ -14,17 +13,14 @@ namespace OrderProcessing.Api.Services
         private readonly ILogger<OrderService> _logger;
         private readonly HttpClient _httpClient;
 
-        public OrderService(
-            AppDbContext db,
-            ILogger<OrderService> logger,
-            HttpClient httpClient)
+        public OrderService(AppDbContext db, ILogger<OrderService> logger, HttpClient httpClient)
         {
             _db = db;
             _logger = logger;
             _httpClient = httpClient;
         }
 
-        public async Task<Order?> CreateOrderAsync(CreateOrderRequest request)
+        public async Task<(Order? Order, string? Error)> CreateOrderAsync(CreateOrderRequest request)
         {
             // Calculate the total amount from the submitted items.
             var totalAmount = request.Items.Sum(item => item.Quantity * item.UnitPrice);
@@ -62,17 +58,17 @@ namespace OrderProcessing.Api.Services
 
                     if (inventoryResponse.StatusCode == HttpStatusCode.NotFound)
                     {
-                        _logger.LogWarning("No inventory found for product {ProductId}.", item.ProductId);
+                        _logger.LogWarning("No stock found for product {ProductId}.", item.ProductId);
                         await CancelOrderAsync(order);
-                        return null;
+                        return (null, $"No stock found for product {item.ProductId}.");
                     }
 
                     if (!inventoryResponse.IsSuccessStatusCode)
                     {
                         _logger.LogError("Inventory service returned status code {StatusCode} for product {ProductId}.", inventoryResponse.StatusCode, item.ProductId);
                         await CancelOrderAsync(order);
-
-                        return null;
+                        return (null, $"Inventory service returned status code {(int)inventoryResponse.StatusCode} for product {item.ProductId}."
+);
                     }
 
                     var inventoryItem = await inventoryResponse.Content.ReadFromJsonAsync<InventoryItem>();
@@ -86,7 +82,7 @@ namespace OrderProcessing.Api.Services
                             inventoryItem?.AvailableQuantity ?? 0);
 
                         await CancelOrderAsync(order);
-                        return null;
+                        return (null, $"Insufficient inventory for product {item.ProductId}. " + $"Requested: {item.Quantity}, Available: {inventoryItem?.AvailableQuantity ?? 0}.");
                     }
                 }
 
@@ -100,7 +96,8 @@ namespace OrderProcessing.Api.Services
                         _logger.LogWarning("Failed to reserve {Quantity} units for product {ProductId}.", item.Quantity, item.ProductId);
                         await ReleaseReservedItemsAsync(reservedItems);
                         await CancelOrderAsync(order);
-                        return null;
+                        return (null, $"Failed to reserve {item.Quantity} units for product {item.ProductId}. " + $"Inventory service returned status code {(int)reserveResponse.StatusCode}."
+                      );
                     }
 
                     reservedItems.Add((item.ProductId, item.Quantity));
@@ -120,7 +117,7 @@ namespace OrderProcessing.Api.Services
                     _logger.LogWarning("Payment processing failed for order {OrderId}.", order.Id);
                     await ReleaseReservedItemsAsync(reservedItems);
                     await CancelOrderAsync(order);
-                    return null;
+                    return (null, $"Payment processing failed for order {order.Id}.");
                 }
 
                 var paymentResponseBody = await paymentResponse.Content.ReadAsStringAsync();
@@ -137,10 +134,9 @@ namespace OrderProcessing.Api.Services
                 if (paymentTransaction == null || paymentTransaction.Status != PaymentStatus.Completed)
                 {
                     _logger.LogWarning("Payment was not completed for order {OrderId}.", order.Id);
-
                     await ReleaseReservedItemsAsync(reservedItems);
                     await CancelOrderAsync(order);
-                    return null;
+                    return (null, $"Payment was not completed for order {order.Id}.");
                 }
 
                 //4. Payment succeeded, so confirm the order.
@@ -150,14 +146,14 @@ namespace OrderProcessing.Api.Services
                 await _db.SaveChangesAsync();
 
                 _logger.LogInformation("Order {OrderId} was successfully created and confirmed.", order.Id);
-                return order;
+                return (order, null);
             }
             catch (HttpRequestException ex)
             {
                 _logger.LogError(ex, "A service was unavailable while processing order {OrderId}.", order.Id);
                 await ReleaseReservedItemsAsync(reservedItems);
                 await CancelOrderAsync(order);
-                return null;
+                return (null, ex.Message);
             }
         }
 
@@ -183,13 +179,13 @@ namespace OrderProcessing.Api.Services
                 .ToListAsync();
         }
 
-        public async Task<Order?> UpdateOrderStatusAsync(Guid id, OrderStatus status)
+        public async Task<(Order? Order, string? Error)> UpdateOrderStatusAsync(Guid id, OrderStatus status)
         {
             var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == id);
 
             if (order == null)
             {
-                return null;
+                return (null, $"Order with ID {id} was not found.");
             }
 
             order.Status = status;
@@ -198,7 +194,7 @@ namespace OrderProcessing.Api.Services
             await _db.SaveChangesAsync();
             _logger.LogInformation("Order {OrderId} status updated to {Status}.", id, status);
 
-            return order;
+            return (order, null);
         }
 
         private async Task ReleaseReservedItemsAsync(List<(string ProductId, int Quantity)> reservedItems)
@@ -207,12 +203,7 @@ namespace OrderProcessing.Api.Services
             {
                 try
                 {
-                    var stockRequest = new StockChangeRequest
-                    {
-                        Quantity = item.Quantity
-                    };
-
-                    var response = await _httpClient.PostAsJsonAsync($"api/inventory/{item.ProductId}/release", stockRequest);
+                    var response = await _httpClient.PostAsync($"api/inventory/{item.ProductId}/release?quantity={item.Quantity}", null);
 
                     if (!response.IsSuccessStatusCode)
                     {

@@ -2,7 +2,6 @@
 using OrderProcessing.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using OrderProcessing.Api.Interfaces;
-using static OrderProcessing.Api.Dtos.InventoryDto;
 
 namespace OrderProcessing.Api.Services
 {
@@ -37,7 +36,6 @@ namespace OrderProcessing.Api.Services
             inventoryItem.ReservedQuantity -= quantity; // remove requested stock from reserved quantity
             inventoryItem.AvailableQuantity += quantity; // add requested stock back to the available quantity
             await _appDbContext.SaveChangesAsync();
-
             return inventoryItem;
         }
     }
