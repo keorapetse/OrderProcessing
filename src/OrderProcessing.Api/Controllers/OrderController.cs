@@ -45,10 +45,7 @@ namespace OrderProcessing.Api.Controllers
                     return BadRequest("Unable to create order.");
                 }
 
-                return CreatedAtAction(
-                    nameof(GetOrderById),
-                    new { id = order.Id },
-                    order);
+                return Ok(order);
             }
             catch (Exception ex)
             {
