@@ -37,7 +37,7 @@ inventory reservation, payment processing, and order confirmation.
 
 Clone the repository and run:
 
-```bash
+bash
 dotnet restore
 dotnet build
 dotnet run
